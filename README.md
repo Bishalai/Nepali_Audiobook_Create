@@ -18,15 +18,16 @@ Input text ([`examples/sample_ne.txt`](examples/sample_ne.txt)):
 > थिएनन्, तर उनलाई जीवनबारेमा सोच्न धेरै मन लाग्थ्यो। के सबैभन्दा ठूलो
 > प्रश्न के हो?
 
-Produced speech ([`examples/sample_ne.mp3`](examples/sample_ne.mp3)):
+Produced speech ([`examples/sample_ne.mp3`](examples/sample_ne.mp3)) — click to
+play (GitHub READMEs can't inline `<audio>`, so it's a link):
 
-<audio controls src="https://github.com/Bishalai/Nepali_Audiobook_Create/raw/main/examples/sample_ne.mp3"></audio>
+▶ [Play example speech (MP3)](examples/sample_ne.mp3)
 
 Produced video ([`examples/sample_ne.mp4`](examples/sample_ne.mp4)) — the text
 appears exactly while its audio plays (timings come from the same manifest used
-to assemble the speech, so sync is exact):
+to assemble the speech, so sync is exact). Watch it here:
 
-<video controls width="640" src="https://github.com/Bishalai/Nepali_Audiobook_Create/raw/main/examples/sample_ne.mp4"></video>
+[<img src="https://i.ytimg.com/vi/ZtcPw-My33w/hqdefault.jpg" width="640" height="360" alt="Watch the video" />](https://www.youtube.com/embed/ZtcPw-My33w)
 
 ## Quick start
 
