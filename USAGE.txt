@@ -1,0 +1,381 @@
+================================================================================
+BOOKSTONEPALI - TRANSLATE ENGLISH BOOKS (EPUB) INTO NEPALI
+Usage guide / command reference                                          v0.2
+================================================================================
+
+Everything runs locally on your computer (no internet needed after setup).
+
+
+--------------------------------------------------------------------------------
+1. ONE-TIME SETUP
+--------------------------------------------------------------------------------
+
+1) Install Python packages (from the project folder):
+
+       pip install -r requirements.txt
+
+2) TTS / video only?  Nothing else to install - skip to section 8.
+   The Nepali voice model is already in  models\vits\  (project-local).
+
+3) TRANSLATION ONLY (Ollama was uninstalled from this PC; sections 2-7
+   need it reinstalled first):
+
+   a) Install Ollama:  https://ollama.com/download
+
+   b) Keep model storage inside the project folder (never C:) - set the
+      user environment variable BEFORE the first pull:
+
+          setx OLLAMA_MODELS "D:\Programming\projects\bookstonepali\models"
+          (then log out/in for it to take effect)
+
+   c) Download the translation model once (~6.6 GB):
+
+          ollama pull qwen3.5:9b-q4_K_M
+
+      This quant fits an 8 GB VRAM GPU (RTX 4060) with room for context.
+
+
+--------------------------------------------------------------------------------
+2. BASIC WORKFLOW - TRANSLATE A BOOK
+--------------------------------------------------------------------------------
+
+Put your book in  books\  (example:  books\mybook.epub)
+
+A) See the chapters and their indexes (1-based spine order):
+
+       python -m translator list books\mybook.epub
+
+B) Translate the FIRST CHAPTER only (quick demo, ~10-15 min for a 3k-word
+   chapter on this GPU):
+
+       python -m translator run books\mybook.epub --chapters 5 --glossary glossary.txt
+
+   (use the chapter number from `list`; skip --glossary if you don't have one)
+
+C) Translate SELECTED chapters / ranges:
+
+       python -m translator run books\mybook.epub --chapters 5,7,9-12
+
+D) Translate the WHOLE BOOK:
+
+       python -m translator run books\mybook.epub --all --out output
+
+E) Translate ANOTHER book - same commands, just a different file:
+
+       python -m translator list books\otherbook.epub
+       python -m translator run books\otherbook.epub --chapters 1-3 --out output2
+
+   Each book gets its own checkpoints (named <book>__<chapter>.json), so you
+   can translate several books in parallel or in any order.
+
+
+--------------------------------------------------------------------------------
+3. PAUSE AND RESUME  (the features you asked about)
+--------------------------------------------------------------------------------
+
+You can stop at ANY time; nothing is ever lost. Progress is saved to
+output\checkpoints\ after EVERY paragraph group.
+
+THREE ways to pause:
+
+  a) From another terminal, while a translation is running:
+
+         python -m translator pause --dir output
+
+     The running job notices the flag after its current paragraph group,
+     saves progress, writes the partial EPUB, unloads the model, and exits.
+
+  b) Press  Ctrl+C  in the terminal running the translation.
+     Same graceful behaviour: checkpoint + partial EPUB + model unloaded.
+
+  c) Automatic time limit:
+
+         python -m translator run books\mybook.epub --all --pause-after-min 60
+
+     Pauses automatically after 60 minutes (good for overnight/chunked runs).
+
+
+ON PAUSE you always get, in the --out folder:
+
+       <book>_ne_ch5,7,9-12_partial.epub   <- the book translated SO FAR
+                                              (already-done chapters in Nepali,
+                                               the rest still English, opens
+                                               normally in any reader)
+       checkpoints\*.json                  <- exact progress
+       report.json                         <- timings
+
+RESUME = run the exact same command again:
+
+       python -m translator run books\mybook.epub --all --out output
+
+Finished chapters/paragraph groups are skipped instantly (loaded from
+checkpoints); it continues where it stopped. Repeat as often as you like.
+
+Note: a stale PAUSE flag from an old session is removed automatically at the
+start of a run, so resume never pauses immediately by accident.
+
+
+--------------------------------------------------------------------------------
+4. WHEN A RUN FINISHES
+--------------------------------------------------------------------------------
+
+- The model is EJECTED from VRAM automatically (memory goes back to ~0 MiB).
+  To do it manually at any time:
+
+       python -m translator unload
+
+- Output EPUB:   output\<book>_ne_ch<....>.epub
+- Report:        output\report.json
+  (segments, chars, seconds, requests, prompt/output tokens, whole-book ETA)
+
+To keep the model loaded between runs (faster if you run several chapter
+batches back to back):
+
+       python -m translator run books\mybook.epub --chapters 5 --keep-model
+
+
+--------------------------------------------------------------------------------
+5. HOW IT TRANSLATES (and the knobs)
+--------------------------------------------------------------------------------
+
+- Paragraph grouping: text nodes are NEVER split. Single-sentence paragraphs
+  and short fragments (salutations, captions) are MERGED with neighbours into
+  full paragraph units of a target size adapted to the chapter length
+  (~chapter_chars / 20, clamped to 400-1200 chars). Headings split into spans
+  are collapsed and translated as one title.
+
+       --par-chars 900          force the paragraph target size (chars)
+                                (default: adaptive)
+
+- Fresh context per request: every LLM call is stateless. Only the LAST
+  translated paragraph is carried over, truncated, to keep style continuity.
+  Context never accumulates -> no drift, no hallucinated continuations.
+
+       --prev-context-chars 400   how much of the previous paragraph is kept
+                                  (0 = no carry-over at all)
+       --num-ctx 4096            context window per request (fresh each call)
+
+- Anti-glitch handling: each request must return a JSON array aligned to the
+  segments; bad replies are retried twice, then fall back to per-segment
+  translation. Every group is checkpointed immediately.
+
+- Glossary for consistent names/terms (one per line, 'source -> target'):
+
+       python -m translator run books\mybook.epub --all --glossary glossary.txt
+
+
+--------------------------------------------------------------------------------
+6. FULL OPTION LIST  (python -m translator run --help)
+--------------------------------------------------------------------------------
+
+  --chapters 1,3,5-8     which chapters (1-based, from `list`)
+  --all                  whole book
+  --out DIR              outputs + checkpoints (default: output)
+  --model NAME           default: qwen3.5:9b-q4_K_M
+  --glossary FILE        term list file
+  --temperature 0.3      lower = more literal (0.2-0.4 recommended)
+  --num-ctx 4096         per-request context window
+  --num-predict 2048     max output tokens per request (auto-raised for long
+                         paragraphs)
+  --par-chars N          paragraph-group target size (default: adaptive)
+  --prev-context-chars N carried-over context (default 400)
+  --pause-after-min N    automatic pause after N minutes
+  --keep-model           do not eject the model when done
+  --no-resume            ignore checkpoints and re-translate from scratch
+  --no-epub              translate only, skip EPUB rebuild
+
+Other commands:
+
+  python -m translator list <book.epub>     chapter listing
+  python -m translator pause --dir DIR      ask a running job to pause
+  python -m translator unload               eject model from VRAM
+
+
+--------------------------------------------------------------------------------
+7. TIPS / REALISTIC TIMING (RTX 4060 8 GB, Qwen3.5-9B Q4_K_M)
+--------------------------------------------------------------------------------
+
+- A ~3,000-word chapter:   ~10-15 minutes
+- Throughput: roughly 20-60 source chars/s depending on paragraph sizes
+- Full Sophie's World (~1.07 M chars): plan ~4-6 hours total, run it in
+  sessions with --pause-after-min 120 or Ctrl+C and resume later.
+- First request after a fresh start is slow (~60 s) - model is loading.
+- The whole book is never blocked: partial EPUBs are always readable.
+- Long chapters (the last chapters of some books are 100k+ chars) are still
+  checkpointed group-by-group - a crash loses at most one paragraph group.
+- Quality: 9B Q4 is good but not perfect. Re-running a chapter with
+  --no-resume after adding names to the glossary is cheap (checkpointed), and
+  a second pass can be added later as a QA stage.
+
+Copyright note: translating a book is a derivative work - fine for personal
+use, not for redistribution.
+
+
+--------------------------------------------------------------------------------
+8. SPEECH AUDIO (TTS) - turn a translated book into an audiobook
+--------------------------------------------------------------------------------
+
+The TTS engine is the Nepali VITS model (huggingface.co/Ichigo369/
+nepali-vits-tts, checkpoint G_100000.pth). Everything is stored INSIDE the
+project: weights in models\vits\, code in third_party\vits\. No HuggingFace
+or torch caches are created anywhere else.
+
+ONE-TIME SETUP (already done on this PC):
+
+       python scripts\download_vits.py      # downloads ~437 MB into models\vits
+       python scripts\setup_vits.py         # wires config/symbols/cleaners
+                                            # (download_vits.py calls this too)
+
+WORKFLOW:
+
+A) Translate a chapter first (section 2), then list the book:
+
+       python -m tts list output\mybook_ne.epub
+
+   Each line shows  ne  (Devanagari, ready) or  en  (still English).
+
+B) Make speech for a chapter:
+
+       python -m tts run output\mybook_ne.epub --chapters 4 --out output
+
+   Output:  output\audio\<book>__ch04.mp3   (chapter audiobook)
+            output\audio\<book>__ch04\      (per-sentence WAVs + manifest.json)
+            output\tts_report.json
+
+C) Whole book (merges all chapter MP3s into <book>_full.mp3):
+
+       python -m tts run output\mybook_ne.epub --all --out output
+
+D) SPEECH FROM YOUR OWN TEXT FILE  (txt only - no EPUB needed):
+
+   For a .txt file containing YOUR OWN Nepali translation in Devanagari
+   (UTF-8; blank lines between paragraphs work best):
+
+       python -m tts text books\mytext.txt --out output
+
+   Output:  output\audio\mytext.mp3          (the speech)
+            output\audio\mytext\manifest.json (checkpoint + timings)
+
+   - Same pipeline as books: numbers are spelled out (110 -> एक सय दस),
+     text is split into <=180-char chunks, per-chunk WAVs are checkpointed.
+   - Pause/resume works exactly the same (see below): `python -m tts pause`,
+     Ctrl+C, or --pause-after-min, then re-run the same command.
+   - A file with blank lines between paragraphs is preferred; a file with
+     one sentence per line is detected automatically; anything else is read
+     as flowing text and re-split at sentence boundaries.
+   - Editing the .txt later is safe: the manifest stores a hash of the
+     input, so changed parts are re-synthesized and the rest is reused.
+
+E) VIDEO - text on screen + the TTS speech (MP4):
+
+       python scripts\make_video.py books\mytext.txt --out output
+
+   Output:  output\video\mytext.mp4          (1280x720, text + audio)
+
+   - If the speech does not exist yet (or the .txt was edited), the script
+     synthesizes it first automatically - one command gives you the video.
+   - The text appears centered on screen exactly while its audio plays
+     (timings come from the same manifest used to assemble the speech, so
+     sync is exact). Fade in/out between lines.
+   - Devanagari renders correctly (ffmpeg libass + HarfBuzz shaping, font
+     "Nirmala UI" which ships with Windows).
+   - Options:
+
+         --sentence             show one sentence at a time instead of the
+                                whole paragraph (timings estimated by length)
+         --font "Font Name"     font family (default "Nirmala UI")
+         --fontsize N           fixed size (default: auto-fit per line)
+         --resolution 1920x1080  output size (default 1280x720)
+         --bg 0x1b1b2f          background color (default 0x141422)
+         --fade-ms 300          text fade duration in ms
+         --max-chars/--length-scale/--gap-*  forwarded to synthesis if the
+                                speech has to be (re)generated
+
+PAUSE / RESUME - exactly like the translator (for `tts run` AND `tts text`):
+
+  a) From another terminal:
+
+         python -m tts pause --dir output
+
+     The run stops after the current sentence chunk, writes the PARTIAL
+     chapter audio (<book>__ch04_partial.mp3), unloads the model and exits.
+
+  b) Press  Ctrl+C  - same graceful behaviour.
+
+  c) Automatic time limit:
+
+         python -m tts run output\mybook_ne.epub --all --pause-after-min 30
+
+RESUME = run the same command again:
+
+       python -m tts run output\mybook_ne.epub --all --out output
+
+Finished chunks are skipped instantly (checked against manifest.json +
+the saved WAV files); it continues exactly where it stopped. On completion
+the stale _partial file is removed automatically.
+
+HOW IT WORKS (why the audio stays clear):
+
+- Numbers are spelled out in Nepali BEFORE synthesis, because the model
+  cannot read digits:  110 -> एक सय दस,  3.14 -> तीन दशमलव एक चार,
+  50% -> पचास प्रतिशत,  1990-1995 -> ... देखि ...,  B.C. -> ईसा पूर्व.
+  (A digit left in the text would be read as garbage or skipped.)
+- Text is split into sentence-sized chunks of at most 180 chars
+  (--max-chars): long inputs make VITS degrade / drift.
+- Chunks are synthesized one by one and each WAV is saved immediately, so
+  a pause/crash loses at most one sentence.
+- Silence is inserted between sentences (0.25 s), paragraphs (0.65 s) and
+  before headings (1.0 s) - tune with --gap-sentence/--gap-para/--gap-heading.
+- Leftover untranslated English words are dropped (with a warning in
+  tts_report.json) because the model's alphabet is Devanagari only.
+- The model is loaded on demand and unloaded from VRAM when the run ends
+  (0 MiB verified).
+
+SPEED (RTX 4060): ~40-60x realtime - a 23-minute chapter takes ~30 s.
+The whole book (~15-20 h of audio) is roughly 20-30 minutes of synthesis.
+
+FULL OPTION LIST (python -m tts run --help):
+
+  --chapters 1,3,5-8     which chapters (1-based, from `list`)
+  --all                  every chapter
+  --out DIR              output + manifests (default: output)
+  --max-chars N          max chars per chunk (default 180)
+  --length-scale F       speech speed: <1 faster, >1 slower (default 1.0)
+  --noise-scale F        variation of the voice (default 0.667)
+  --gap-sentence/--gap-para/--gap-heading F   silence in seconds
+  --pause-after-min N    automatic pause after N minutes
+  --no-resume            ignore manifests and re-synthesize from scratch
+  --no-mp3               keep WAV instead of encoding MP3
+  --no-concat            skip the full-book MP3 merge
+  --keep-model           leave the model in VRAM when finished
+  --checkpoint FILE      default models\vits\G_100000.pth
+
+Other commands:
+
+  python -m tts list <epub>          chapter listing + ne/en status
+  python -m tts text <file.txt>      speech from your own Devanagari .txt
+  python -m tts pause --dir DIR      ask a running job to pause
+  python scripts\make_video.py <file.txt>   MP4 video (text on screen + audio)
+
+
+--------------------------------------------------------------------------------
+9. PROJECT LAYOUT
+--------------------------------------------------------------------------------
+
+  books\                     your input EPUBs and .txt files
+  translator\                the translation pipeline (Python package)
+  tts\                       the speech pipeline (Python package)
+  scripts\download_vits.py   one-time TTS model download (project-local)
+  scripts\setup_vits.py      one-time VITS code wiring
+  scripts\make_video.py      text-on-screen MP4 generator (ffmpeg/libass)
+  glossary.txt               name/term glossary for Sophie's World
+  models\                    all model weights, project-local (never C:):
+                               vits\ (437 MB), cache\  [Ollama models removed]
+  third_party\vits\          cloned VITS inference code
+  output\                    results: EPUBs, checkpoints, audio\, video\,
+                               manifests, reports
+  requirements.txt           pip dependencies
+  README.md                  technical overview
+  USAGE.txt                  this file
+
+End of file.

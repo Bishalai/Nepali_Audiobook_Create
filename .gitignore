@@ -1,0 +1,18 @@
+# --- never upload to GitHub ---
+
+# VITS model weights (~437 MB) - users download them after cloning:
+#     python scripts/download_vits.py
+models/
+
+# cloned third-party VITS code (re-created by scripts/download_vits.py)
+third_party/
+
+# your personal input books (EPUBs / .txt) and all generated results
+# (audio, video, checkpoints, logs, reports) - kept local only.
+# The single committed example lives in examples\ instead.
+books/
+output/
+
+# python junk
+__pycache__/
+*.pyc
