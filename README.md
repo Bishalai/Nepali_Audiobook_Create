@@ -20,13 +20,13 @@ Input text ([`examples/sample_ne.txt`](examples/sample_ne.txt)):
 
 Produced speech ([`examples/sample_ne.mp3`](examples/sample_ne.mp3)):
 
-<audio controls src="examples/sample_ne.mp3"></audio>
+<audio controls src="https://github.com/Bishalai/Nepali_Audiobook_Create/raw/main/examples/sample_ne.mp3"></audio>
 
 Produced video ([`examples/sample_ne.mp4`](examples/sample_ne.mp4)) — the text
 appears exactly while its audio plays (timings come from the same manifest used
 to assemble the speech, so sync is exact):
 
-<video controls src="examples/sample_ne.mp4" width="640"></video>
+<video controls width="640" src="https://github.com/Bishalai/Nepali_Audiobook_Create/raw/main/examples/sample_ne.mp4"></video>
 
 ## Quick start
 
